@@ -1,0 +1,204 @@
+#!/bin/bash
+
+# set -euxo pipefail # do debugowania - wypisuje na standardowe wyjście
+# set -euo pipefail # do działania
+
+# Wczytanie zmiennych z pliku i definiowanie zmiennych
+source ./.clean_files
+CATALOGS=()
+OPTS=()
+DEFAULT_CATALOG="./X"
+
+
+#---------------------------------------------------
+#---------------------Funkcje-----------------------
+#---------------------------------------------------
+function help() {
+    cat << EOF
+Usage: asu.sh [CATALOGS] [OPTION] [CATALOG]...
+    -h --help        Display this message
+    -x --catalog     Specify the default catalog X
+    -d --duplicates  Remove duplicates
+    -e --empty       Remove empty files
+    -t --temp        Remove temporary files
+    -c --copy        Copy files to directory X
+    -r --rename      Rename every file in the given catalogs
+    -s --same-name   Remove files with the same name
+    -p --perms       Change permissions to default value
+    -m --marks       Replace problematic characters with default
+Example:
+./asu.sh ./X ./Y1 ./Y2 ./Y3 --catalog ./X --duplicates --empty --temp --same-name --perms --copy --marks --default
+EOF
+exit 0;
+}
+
+#TODO --same-name, --rename, --copy, --duplicates, --catalog
+
+# Funkcja zmieniajaca nazwe pliku
+function rename_files() {
+    while IFS= read -r -d $'\0' FILENAME; do
+        read -p "Do you want to rename file: $FILENAME? [y/n] "  RENAME_FILE </dev/tty
+
+        if [[ "$RENAME_FILE" = "y" ]]; then
+            read -p "Provide new name: " NEW_FILENAME </dev/tty
+            mv -- "$FILENAME" "$NEW_FILENAME"
+            echo "Replaced $FILENAME with $NEW_FILENAME"
+        else
+            echo "Name: $FILENAME did not changed."
+        fi
+    done < <(find "${CATALOGS[@]}" -type f -print0)
+}
+
+# Funkcja usuwajaca puste pliki
+function empty_files() {
+    while IFS= read -r -d $'\0' FILENAME; do
+        read -p "Do you want to remove an empty file: $FILENAME? [y/n] " REMOVE_EMPTY </dev/tty
+        if [[ "$REMOVE_EMPTY" = "y" ]]; then
+            rm "$FILENAME"
+            echo "$FILENAME has been removed."
+        fi
+    done < <(find "${CATALOGS[@]}" -type f -size 0 -print0)
+}
+
+# Funkcja usuwajaca tymczasowe pliki
+function temp_files() {
+    while IFS= read -r -d $'\0' FILENAME; do
+        read -p "Do you want to remove a temporary file: $FILENAME? [y/n] " RMV_TMP </dev/tty
+        if [[ "$RMV_TMP" = "y" ]]; then
+            rm "$FILENAME"
+            echo "$FILENAME has been removed."
+        fi
+    done < <(find "${CATALOGS[@]}" -type f -regex "$TMP_FILES" -print0)
+}
+
+# Funkcja zmienia dostepy do plikow
+function change_perms() {
+    while IFS= read -r -d $'\0' FILENAME; do
+        echo "Detected file with permissions you may be willing to change: $FILENAME"
+        permissions_number=$(stat -c "%a" "$FILENAME")
+        permissions_symbol=$(stat -c "%A" "$FILENAME")
+        echo "Current permissions: "$permissions_number" (number)  "$permissions_symbol" (symbol)"
+        read -p "Do you want to change permissions to default value $SUGGESTED_ACCESS? [y/n] "  CHANGE_PERMS </dev/tty
+        if [[ "$CHANGE_PERMS" = "y" ]]; then
+            chmod "-777" "$FILENAME"
+            chmod "+$SUGGESTED_ACCESS" "$FILENAME"
+            echo "Changed perms for $FILENAME to $SUGGESTED_ACCESS"
+        fi
+    done < <(find "${CATALOGS[@]}" -type f -not -perm "$SUGGESTED_ACCESS" -print0)
+}
+
+# Funkcja zamienia problematyczne nazwy plikow, tj. zawierajace znaki \"”;*?\$#'‘|\\,'
+function find_marks() {
+    while IFS= read -r -d $'\0' FILENAME; do
+        # Pominiecie, jesli wyrazenie wylapano przez nazwe pliku
+        result=$(echo "${FILENAME##*/}" | grep -a "[${CHARACTERS_TO_CHANGE}]")
+        if [[ -z "$result" ]]; then
+            continue
+        fi
+        echo "Detected the file to change name: $FILENAME"
+        read -p "Are you sure to remove problematic characters and change a name? [y/n] "  CHANGE_CHARACTERS </dev/tty
+        if [[ "$CHANGE_CHARACTERS" = "y" ]]; then
+            # Rozdzielenie sciezki i nazwy pliku
+            path_only="${FILENAME%/*}"
+            filename_only="${FILENAME##*/}"
+            # Zmiana nazwy pliku
+            NEW_NAME=$(echo "$filename_only" | sed "s/[${CHARACTERS_TO_CHANGE}]/${CHARACTERS_TO_CHANGE_SUBSTITUTE}/g")
+            # Dodanie nazwy pliku do sciezki
+            new_full_path="$path_only/$NEW_NAME"
+            # Zmiana nazwy + komunikat
+            mv -- "$FILENAME" "$new_full_path"
+            echo "Replaced $FILENAME with $new_full_path"
+        else
+            echo "Name: $FILENAME did not changed."
+        fi
+    done < <(find "${CATALOGS[@]}" -type f -print0 | grep -a -z "[${CHARACTERS_TO_CHANGE}]")
+}
+
+#---------------------------------------------------
+#----------------Parsowanie args--------------------
+#---------------------------------------------------
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -h|--help)
+        help
+        ;;
+    -x|--catalog)
+        DEFAULT_CATALOG="$2"
+        shift
+        shift
+        ;;
+    -d|--duplicates)
+        OPTS+=("DUPLICATES")
+        shift
+        ;;
+    -e|--empty)
+        OPTS+=("EMPTY")
+        shift
+        ;;
+    -t|--temp)
+        OPTS+=("TEMP")
+        shift
+        ;;
+    -c|--copy)
+        OPTS+=("COPY")
+        shift
+        ;;
+    -r|--rename)
+        OPTS+=("RENAME")
+        shift
+        ;;
+    -s|--same-name)
+        OPTS+=("SAME")
+        shift
+        ;;
+    -p|--perms)
+        OPTS+=("PERMS")
+        shift
+        ;;
+    -m|--marks)
+        OPTS+=("MARKS")
+        shift
+        ;;
+    -*|--*)
+        echo "Unknown option $1" 1>&2
+        help
+        exit 1
+        ;;
+    *)
+        CATALOGS+=("$1")
+        shift
+        ;;
+    esac
+done
+
+#---------------------------------------------------
+#----------------Wykonanie skryptu------------------
+#---------------------------------------------------
+
+# Sprawdzenie, czy zmienna OPERATIONS jest pusta
+if [ ${#OPTS[@]} -eq 0 ]; then
+    echo "Error: No operations specified." >&2
+    help
+    exit 1
+fi
+
+# Iteracja po podanych argumentach i wywołanie funkcji
+for OPT in "${OPTS[@]}"; do
+    case "$OPT" in
+        MARKS)
+            find_marks
+            ;;
+        PERMS)
+            change_perms
+            ;;
+        TEMP)
+            temp_files
+            ;;
+        EMPTY)
+            empty_files
+            ;;
+        RENAME)
+            rename_files
+            ;;
+    esac
+done
