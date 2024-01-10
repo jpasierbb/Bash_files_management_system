@@ -31,7 +31,50 @@ EOF
 exit 0;
 }
 
-#TODO --same-name, --move?, --duplicates, --catalog
+#TODO --same-name, --duplicates, --move?
+
+# Funkcja usuwajaca pliki o tej samej nazwie, zachowujaca najstarszy
+function same_name_files() {
+    while IFS= read -r -d $'\0' FILENAME; do
+        FILES=()
+        TIMES_CREATED=()
+        FILE_LAST_CREATED="a"
+        MAX_TIME=0
+
+        find "${CATALOGS[@]}" -name "$FILENAME" -print0 | {
+            while IFS= read -r -d $'\0' FILE; do
+                FILES+=("$FILE")
+                TIME=$(stat "$FILE" -c %Y)
+                TIMES_CREATED+=("$TIME")
+
+                if [[ ${TIME} > ${MAX_TIME} ]]; then
+                    MAX_TIME="$TIME"
+                    FILE_LAST_CREATED="$FILE"
+                fi
+            done
+
+            if [[ "$DEFAULT" = "y" ]]; then
+                for FILE in "${FILES[@]}"; do
+                    if [[ "$FILE" != "$FILE_LAST_CREATED" ]]; then
+                        echo "Removing same name file: $FILE"
+                        rm "$FILE"
+                    fi
+                done
+            else
+                echo "Found files with same name: ${FILES[@]}"
+                read -p "Do you want to leave only: $FILE_LAST_CREATED? [y/n] " REMOVE_SAME_NAME </dev/tty
+
+                if [[ "$REMOVE_SAME_NAME" = "y" ]]; then
+                    for FILE in "${FILES[@]}"; do
+                        if [[ "$FILE" != "$FILE_LAST_CREATED" ]]; then
+                            rm "$FILE"
+                        fi
+                    done
+                fi
+            fi        
+        }
+    done < <(find "${CATALOGS[@]}" -type f -print0 | sed 's_.*/__' -z | sort -z |  uniq -z -d)
+}
 
 # Funkcja kopiujaca pliki do katalogu podanego w -x/--catalog
 function copy_files() {
@@ -70,6 +113,57 @@ function copy_files() {
         fi
         done < <(find "$CATALOG" -type f -print0)
     done
+}
+
+# TODO Funkcja usuwajaca duplikacjace sie pliki wzgledem katalogu podanego w -x/--catalog
+function duplicate_files() {
+    FILES=()
+    PREVIOUS_HASH=""
+
+    while IFS= read -r -d $'\0' HASH_FILENAME; do
+        FILENAME=$(echo "$HASH_FILENAME" | cut -c 35-)
+        HASH=$(echo "$HASH_FILENAME" | cut -c -31)
+        if [[ "$PREVIOUS_HASH" != "$HASH" ]]; then
+            if [[ "$PREVIOUS_HASH" != "" ]]; then
+                echo Detected duplicate files: "${FILES[@]}"
+    TIMES_CREATED=()
+
+    FILE_CREATED_FIRST="$FILES"
+    MIN_TIME=$(stat "$FILE_CREATED_FIRST" -c %Y)
+
+    for FILE in "${FILES[@]}"; do
+        TIME=$(stat "$FILE" -c %Y)
+        TIMES_CREATED+=("$TIME")
+
+        if [[ ${MIN_TIME} -gt ${TIME} ]]; then
+            MIN_TIME="$TIME"
+            FILE_CREATED_FIRST="$FILE"
+        fi
+    done
+    if [[ "$DEFAULT" = "y" ]]; then
+        for FILE in "${FILES[@]}"; do
+            if [[ "$FILE" != "$FILE_CREATED_FIRST" ]]; then
+                echo "Removing duplicate file: $FILE"
+                rm "$FILE"
+            fi
+        done
+    else
+        read -p "Do you want to remove all the duplicates and leave only: $FILE_CREATED_FIRST? [y/n] " REMOVE_DUPLICATES </dev/tty
+        if [[ "$REMOVE_DUPLICATES" = "y" ]]; then
+            for FILE in "${FILES[@]}"; do
+                if [[ "$FILE" != "$FILE_CREATED_FIRST" ]]; then
+                    rm "$FILE"
+                fi
+            done
+        fi
+    fi
+            fi
+            FILES=("$FILENAME")
+            PREVIOUS_HASH="$HASH"
+        else
+            FILES+=("$FILENAME")
+        fi
+    done < <(find "${CATALOGS[@]}" -type f -print0 | xargs -0 md5sum -z | sort -k1,32 -z | uniq -w32 -z -D)
 }
 
 # Funkcja zmieniajaca nazwe pliku
@@ -284,6 +378,12 @@ for OPT in "${OPTS[@]}"; do
             ;;
         COPY)
             copy_files
+            ;;
+        DUPLICATES)
+            duplicate_files
+            ;;
+        SAME)
+            same_name_files
             ;;
     esac
 done
