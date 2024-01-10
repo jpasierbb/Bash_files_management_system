@@ -114,8 +114,8 @@ function change_perms() {
         fi
 
         if [[ "$CHANGE_PERMS" = "y" || "$DO_FOR_ALL_FILES" = "YES"  ]]; then
-            chmod "-777" "$FILENAME"
-            chmod "+$SUGGESTED_ACCESS" "$FILENAME"
+            chmod 000 "$FILENAME"
+            chmod $SUGGESTED_ACCESS "$FILENAME"
             echo "Changed perms for $FILENAME to $SUGGESTED_ACCESS"
         fi
     done < <(find "${CATALOGS[@]}" -type f -not -perm "$SUGGESTED_ACCESS" -print0)
@@ -139,7 +139,7 @@ function find_marks() {
                 DO_FOR_ALL_FILES="$CHANGE_CHARACTERS"
             fi
         fi
-        
+
         if [[ "$CHANGE_CHARACTERS" = "y" || "$DO_FOR_ALL_FILES" = "YES" ]]; then
             # Rozdzielenie sciezki i nazwy pliku
             path_only="${FILENAME%/*}"
