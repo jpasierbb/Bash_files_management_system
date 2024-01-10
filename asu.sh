@@ -7,7 +7,7 @@
 source ./.clean_files
 CATALOGS=()
 OPTS=()
-DEFAULT_CATALOG="./X"
+DESIRED_CATALOG="NONE"
 
 #---------------------------------------------------
 #---------------------Funkcje-----------------------
@@ -31,7 +31,46 @@ EOF
 exit 0;
 }
 
-#TODO --same-name, --copy, --duplicates, --catalog
+#TODO --same-name, --move?, --duplicates, --catalog
+
+# Funkcja kopiujaca pliki do katalogu podanego w -x/--catalog
+function copy_files() {
+    local DO_FOR_ALL_FILES="n"
+    # Sprawdzenie czy podano odpowiednia ilosc argumentow
+    if [[ "$DESIRED_CATALOG" = "NONE" || ${#CATALOGS[@]} = 0 || ${#CATALOGS[@]} = 1 ]]; then
+        echo "Provide catalogs names and choose main catalog"
+        echo "Example: ./asu.sh ./X ./Y --catalog ./X"
+        echo "help: ./asu.sh -h"
+        exit 1
+    fi
+    # TODO zmodyfiowac
+    for CATALOG in "${CATALOGS[@]}"; do
+        while IFS= read -r -d $'\0' FILENAME; do
+        # Nie kopiujemy pozadanego katalogu do niego samego
+        if [[ "$CATALOG" = "$DESIRED_CATALOG" ]]; then
+            continue
+        fi
+        # Zapewnienie opcji dla wszystkich plikow
+        if [[ "$DO_FOR_ALL_FILES" != "YES" ]]; then
+            echo "Do you want to copy the file $FILENAME to $DESIRED_CATALOG?"
+            echo "[YES] - for all files, [y/n] - for this file"
+            read -p "[YES/y/n] "  COPY_FILE </dev/tty
+            if [[ "$COPY_FILE" = "YES" ]]; then
+                DO_FOR_ALL_FILES="$COPY_FILE"
+            fi
+        fi
+        # Logika kopiowania
+        if [[ "$COPY_FILE" = "y" || "$DO_FOR_ALL_FILES" = "YES" ]]; then
+            CLEAR_CATALOG=$(echo -n "$CATALOG" | sed -z 's/\//\\\//g')
+            CLEAR_DEFAULT=$(echo -n "$DESIRED_CATALOG" | sed -z 's/\//\\\//g')
+            NEW_FILENAME=$(echo -n "$FILENAME" | sed -z "0,/$CLEAR_CATALOG/{s/$CLEAR_CATALOG/$CLEAR_DEFAULT/}")
+            mkdir -p "$(dirname "$NEW_FILENAME")"
+            cp -r -- "$FILENAME" "$NEW_FILENAME"
+            echo "File $FILENAME copied to $NEW_FILENAME"
+        fi
+        done < <(find "$CATALOG" -type f -print0)
+    done
+}
 
 # Funkcja zmieniajaca nazwe pliku
 function rename_files() {
@@ -166,7 +205,7 @@ while [[ $# -gt 0 ]]; do
         help
         ;;
     -x|--catalog)
-        DEFAULT_CATALOG="$2"
+        DESIRED_CATALOG="$2"
         shift
         shift
         ;;
@@ -242,6 +281,9 @@ for OPT in "${OPTS[@]}"; do
             ;;
         RENAME)
             rename_files
+            ;;
+        COPY)
+            copy_files
             ;;
     esac
 done
