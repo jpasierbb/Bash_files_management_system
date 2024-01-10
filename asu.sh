@@ -31,14 +31,22 @@ EOF
 exit 0;
 }
 
-#TODO --same-name, --rename, --copy, --duplicates, --catalog
+#TODO --same-name, --copy, --duplicates, --catalog
 
 # Funkcja zmieniajaca nazwe pliku
 function rename_files() {
+    local DO_FOR_ALL_FILES="n"
     while IFS= read -r -d $'\0' FILENAME; do
-        read -p "Do you want to rename file: $FILENAME? [y/n] "  RENAME_FILE </dev/tty
+        if [[ "$DO_FOR_ALL_FILES" != "YES" ]]; then
+            echo "Do you want to rename file: $FILENAME?"
+            echo "[YES] - for all files, [y/n] - for this file"
+            read -p "[YES/y/n] "  RENAME_FILE </dev/tty
+            if [[ "$RENAME_FILE" = "YES" ]]; then
+                DO_FOR_ALL_FILES="$RENAME_FILE"
+            fi
+        fi
 
-        if [[ "$RENAME_FILE" = "y" ]]; then
+        if [[ "$RENAME_FILE" = "y" || "$DO_FOR_ALL_FILES" = "YES" ]]; then
             read -p "Provide new name: " NEW_FILENAME </dev/tty
             mv -- "$FILENAME" "$NEW_FILENAME"
             echo "Replaced $FILENAME with $NEW_FILENAME"
@@ -50,9 +58,18 @@ function rename_files() {
 
 # Funkcja usuwajaca puste pliki
 function empty_files() {
+    local DO_FOR_ALL_FILES="n"
     while IFS= read -r -d $'\0' FILENAME; do
-        read -p "Do you want to remove an empty file: $FILENAME? [y/n] " REMOVE_EMPTY </dev/tty
-        if [[ "$REMOVE_EMPTY" = "y" ]]; then
+        if [[ "$DO_FOR_ALL_FILES" != "YES" ]]; then
+            echo "Do you want to remove an empty file: $FILENAME?"
+            echo "[YES] - for all files, [y/n] - for this file"
+            read -p "[YES/y/n] "  REMOVE_EMPTY </dev/tty
+            if [[ "$REMOVE_EMPTY" = "YES" ]]; then
+                DO_FOR_ALL_FILES="$REMOVE_EMPTY"
+            fi
+        fi
+
+        if [[ "$REMOVE_EMPTY" = "y" || "$DO_FOR_ALL_FILES" = "YES" ]]; then
             rm "$FILENAME"
             echo "$FILENAME has been removed."
         fi
@@ -61,9 +78,18 @@ function empty_files() {
 
 # Funkcja usuwajaca tymczasowe pliki
 function temp_files() {
+    local DO_FOR_ALL_FILES="n"
     while IFS= read -r -d $'\0' FILENAME; do
-        read -p "Do you want to remove a temporary file: $FILENAME? [y/n] " RMV_TMP </dev/tty
-        if [[ "$RMV_TMP" = "y" ]]; then
+        if [[ "$DO_FOR_ALL_FILES" != "YES" ]]; then
+            echo "Do you want to remove a temporary file: $FILENAME?"
+            echo "[YES] - for all files, [y/n] - for this file"
+            read -p "[YES/y/n] "  RMV_TMP </dev/tty
+            if [[ "$RMV_TMP" = "YES" ]]; then
+                DO_FOR_ALL_FILES="$RMV_TMP"
+            fi
+        fi
+
+        if [[ "$RMV_TMP" = "y" || "$DO_FOR_ALL_FILES" = "YES" ]]; then
             rm "$FILENAME"
             echo "$FILENAME has been removed."
         fi
@@ -72,13 +98,22 @@ function temp_files() {
 
 # Funkcja zmienia dostepy do plikow
 function change_perms() {
+    local DO_FOR_ALL_FILES="n"
     while IFS= read -r -d $'\0' FILENAME; do
         echo "Detected file with permissions you may be willing to change: $FILENAME"
         permissions_number=$(stat -c "%a" "$FILENAME")
         permissions_symbol=$(stat -c "%A" "$FILENAME")
         echo "Current permissions: "$permissions_number" (number)  "$permissions_symbol" (symbol)"
-        read -p "Do you want to change permissions to default value $SUGGESTED_ACCESS? [y/n] "  CHANGE_PERMS </dev/tty
-        if [[ "$CHANGE_PERMS" = "y" ]]; then
+        if [[ "$DO_FOR_ALL_FILES" != "YES" ]]; then
+            echo "Do you want to change permissions to default value $SUGGESTED_ACCESS?"
+            echo "[YES] - for all files, [y/n] - for this file"
+            read -p "[YES/y/n] "  CHANGE_PERMS </dev/tty
+            if [[ "$CHANGE_PERMS" = "YES" ]]; then
+                DO_FOR_ALL_FILES="$CHANGE_PERMS"
+            fi
+        fi
+
+        if [[ "$CHANGE_PERMS" = "y" || "$DO_FOR_ALL_FILES" = "YES"  ]]; then
             chmod "-777" "$FILENAME"
             chmod "+$SUGGESTED_ACCESS" "$FILENAME"
             echo "Changed perms for $FILENAME to $SUGGESTED_ACCESS"
@@ -88,6 +123,7 @@ function change_perms() {
 
 # Funkcja zamienia problematyczne nazwy plikow, tj. zawierajace znaki \"”;*?\$#'‘|\\,'
 function find_marks() {
+    local DO_FOR_ALL_FILES="n"
     while IFS= read -r -d $'\0' FILENAME; do
         # Pominiecie, jesli wyrazenie wylapano przez nazwe pliku
         result=$(echo "${FILENAME##*/}" | grep -a "[${CHARACTERS_TO_CHANGE}]")
@@ -95,8 +131,16 @@ function find_marks() {
             continue
         fi
         echo "Detected the file to change name: $FILENAME"
-        read -p "Are you sure to remove problematic characters and change a name? [y/n] "  CHANGE_CHARACTERS </dev/tty
-        if [[ "$CHANGE_CHARACTERS" = "y" ]]; then
+        if [[ "$DO_FOR_ALL_FILES" != "YES" ]]; then
+            echo "Are you sure to remove problematic characters and change a name?"
+            echo "[YES] - for all files, [y/n] - for this file"
+            read -p "[YES/y/n] "  CHANGE_CHARACTERS </dev/tty
+            if [[ "$CHANGE_CHARACTERS" = "YES" ]]; then
+                DO_FOR_ALL_FILES="$CHANGE_CHARACTERS"
+            fi
+        fi
+        
+        if [[ "$CHANGE_CHARACTERS" = "y" || "$DO_FOR_ALL_FILES" = "YES" ]]; then
             # Rozdzielenie sciezki i nazwy pliku
             path_only="${FILENAME%/*}"
             filename_only="${FILENAME##*/}"
