@@ -225,8 +225,10 @@ function rename_files() {
 
         if [[ "$RENAME_FILE" = "y" || "$DO_FOR_ALL_FILES" = "YES" ]]; then
             read -p "Provide new name: " NEW_FILENAME </dev/tty
-            mv -- "$FILENAME" "$NEW_FILENAME"
-            echo "Replaced $FILENAME with $NEW_FILENAME"
+            path_only="${FILENAME%/*}"
+            new_full_path="$path_only/$NEW_FILENAME"
+            mv -- "$FILENAME" "$new_full_path"
+            echo "Replaced $FILENAME with $new_full_path"
         else
             echo "Name: $FILENAME did not changed."
         fi
