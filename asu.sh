@@ -142,10 +142,16 @@ function duplicate_files() {
                     fi
                 done
 
-                # TODO mechanizm do usuwania wszystkich na raz
                 echo "F: $FILE"
-                read -p "Do you want to remove all the duplicates and leave only: $FILE_CREATED_FIRST? [y/n] " REMOVE_DUPLICATES </dev/tty
-                if [[ "$REMOVE_DUPLICATES" = "y" ]]; then
+                if [[ "$DO_FOR_ALL_FILES" != "YES" ]]; then
+                    echo "Do you want to remove all the duplicates and leave only: $FILE_CREATED_FIRST?"
+                    echo "[YES] - for all files, [y/n] - for this file"
+                    read -p "[YES/y/n] "  REMOVE_DUPLICATES </dev/tty
+                    if [[ "$REMOVE_DUPLICATES" = "YES" ]]; then
+                        DO_FOR_ALL_FILES="$REMOVE_DUPLICATES"
+                    fi
+                fi
+                if [[ "$REMOVE_DUPLICATES" = "y" || "$DO_FOR_ALL_FILES" = "YES" ]]; then
                     for FILE in "${FILES[@]}"; do
                         if [[ "$FILE" != "$FILE_CREATED_FIRST" ]]; then
                             rm "$FILE"
