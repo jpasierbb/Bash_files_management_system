@@ -32,7 +32,6 @@ EOF
 exit 0;
 }
 
-#TODO --same-name, --move?
 
 # Funkcja usuwajaca pliki o tej samej nazwie, zachowujaca najstarszy
 function same_name_files() {
