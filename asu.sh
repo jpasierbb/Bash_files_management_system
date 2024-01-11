@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # set -euxo pipefail # do debugowania - wypisuje na standardowe wyjście
-# set -euo pipefail # do działania
+set -euo pipefail # do działania
 
 # Wczytanie zmiennych z pliku i definiowanie zmiennych
 source ./.clean_files
@@ -19,7 +19,7 @@ Usage: asu.sh [CATALOGS] [OPTION] [CATALOG]...
     -x  --catalog     Specify the default catalog X
     -d  --duplicates  Remove duplicates
     -e  --empty       Remove empty files
-    -l  --empty-dir   Remove empty dicitonaries
+    -l  --empty-dir   Remove empty catalogs and subcatalogs
     -t  --temp        Remove temporary files
     -c  --copy        Copy files to directory X specified using -x|--catalog option
     -v  --move        Move files to directory X specified using -x|--catalog option
@@ -239,8 +239,8 @@ function empty_dirs() {
     while IFS= read -r -d $'\0' DIRNAME; do
         if [ -z "$(find "$DIRNAME" -type f)" ]; then
             if [[ "$DO_FOR_ALL_DIRS" != "YES" ]]; then
-                echo "Do you want to remove an empty dictionary: $DIRNAME?"
-                echo "[YES] - for all dictionaries, [y/n] - for this dictionary"
+                echo "Do you want to remove an empty catalog: $DIRNAME?"
+                echo "[YES] - for all catalogs, [y/n] - for this catalog"
                 read -p "[YES/y/n] "  REMOVE_EMPTY </dev/tty
                 if [[ "$REMOVE_EMPTY" = "YES" ]]; then
                     DO_FOR_ALL_DIRS="$REMOVE_EMPTY"
