@@ -15,16 +15,18 @@ DESIRED_CATALOG="NONE"
 function help() {
     cat << EOF
 Usage: asu.sh [CATALOGS] [OPTION] [CATALOG]...
-    -h --help        Display this message
-    -x --catalog     Specify the default catalog X
-    -d --duplicates  Remove duplicates for the first given catalog
-    -e --empty       Remove empty files
-    -t --temp        Remove temporary files
-    -c --copy        Copy files to directory X
-    -r --rename      Rename every file in the given catalogs
-    -s --same-name   Remove files with the same name
-    -p --perms       Change permissions to default value
-    -m --marks       Replace problematic characters with default
+    -h  --help        Display this message
+    -x  --catalog     Specify the default catalog X
+    -d  --duplicates  Remove duplicates
+    -e  --empty       Remove empty files
+    -l  --empty-dir   Remove empty dicitonaries
+    -t  --temp        Remove temporary files
+    -c  --copy        Copy files to directory X specified using -x|--catalog option
+    -v  --move        Move files to directory X specified using -x|--catalog option
+    -r  --rename      Rename every file in the given catalogs
+    -s  --same-name   Remove files with the same name
+    -p  --perms       Change permissions to default value
+    -m  --marks       Replace problematic characters with default
 Example:
 ./asu.sh ./X ./Y1 ./Y2 ./Y3 --catalog ./X --duplicates --empty --temp --same-name --perms --copy --marks --default
 ./asu.sh ./X ./Y1 ./Y2 ./Y3 --duplicates
@@ -77,6 +79,44 @@ function same_name_files() {
     done < <(find "${CATALOGS[@]}" -type f -print0 | sed 's_.*/__' -z | sort -z | uniq -z -d)
 }
 
+# Funkcja kopiujaca pliki do katalogu podanego w -x/--catalog
+function move_files() {
+    local DO_FOR_ALL_FILES="n"
+    # Sprawdzenie czy podano odpowiednia ilosc argumentow
+    if [[ "$DESIRED_CATALOG" = "NONE" || ${#CATALOGS[@]} = 0 || ${#CATALOGS[@]} = 1 ]]; then
+        echo "Provide catalogs names and choose main catalog"
+        echo "Example: ./asu.sh ./X ./Y --catalog ./X"
+        echo "help: ./asu.sh -h"
+        exit 1
+    fi
+    # TODO zmodyfiowac
+    for CATALOG in "${CATALOGS[@]}"; do
+        while IFS= read -r -d $'\0' FILENAME; do
+        # Nie kopiujemy pozadanego katalogu do niego samego
+        if [[ "$CATALOG" = "$DESIRED_CATALOG" ]]; then
+            continue
+        fi
+        # Zapewnienie opcji dla wszystkich plikow
+        if [[ "$DO_FOR_ALL_FILES" != "YES" ]]; then
+            echo "Do you want to move the file $FILENAME to $DESIRED_CATALOG?"
+            echo "[YES] - for all files, [y/n] - for this file"
+            read -p "[YES/y/n] "  MOVE_FILE </dev/tty
+            if [[ "$MOVE_FILE" = "YES" ]]; then
+                DO_FOR_ALL_FILES="$MOVE_FILE"
+            fi
+        fi
+        # Logika kopiowania
+        if [[ "$MOVE_FILE" = "y" || "$DO_FOR_ALL_FILES" = "YES" ]]; then
+            CLEAR_CATALOG=$(echo -n "$CATALOG" | sed -z 's/\//\\\//g')
+            CLEAR_DEFAULT=$(echo -n "$DESIRED_CATALOG" | sed -z 's/\//\\\//g')
+            NEW_FILENAME=$(echo -n "$FILENAME" | sed -z "0,/$CLEAR_CATALOG/{s/$CLEAR_CATALOG/$CLEAR_DEFAULT/}")
+            mkdir -p "$(dirname "$NEW_FILENAME")"
+            mv "$FILENAME" "$NEW_FILENAME"
+            echo "File $FILENAME moved to $NEW_FILENAME"
+        fi
+        done < <(find "$CATALOG" -type f -print0)
+    done
+}
 
 # Funkcja kopiujaca pliki do katalogu podanego w -x/--catalog
 function copy_files() {
@@ -88,7 +128,6 @@ function copy_files() {
         echo "help: ./asu.sh -h"
         exit 1
     fi
-    # TODO zmodyfiowac
     for CATALOG in "${CATALOGS[@]}"; do
         while IFS= read -r -d $'\0' FILENAME; do
         # Nie kopiujemy pozadanego katalogu do niego samego
@@ -117,7 +156,7 @@ function copy_files() {
     done
 }
 
-# TODO Funkcja usuwajaca duplikacjace sie pliki wzgledem pierwszego podanego katalogu
+# Funkcja usuwajaca duplikacjace sie pliki wzgledem pierwszego podanego katalogu
 function duplicate_files() {
     local DO_FOR_ALL_FILES="n"
     local FILES=()
@@ -192,6 +231,28 @@ function rename_files() {
             echo "Name: $FILENAME did not changed."
         fi
     done < <(find "${CATALOGS[@]}" -type f -print0)
+}
+
+# Funkcja usuwajaca puste katalogi
+function empty_dirs() {
+    local DO_FOR_ALL_DIRS="n"
+    while IFS= read -r -d $'\0' DIRNAME; do
+        if [ -z "$(find "$DIRNAME" -type f)" ]; then
+            if [[ "$DO_FOR_ALL_DIRS" != "YES" ]]; then
+                echo "Do you want to remove an empty dictionary: $DIRNAME?"
+                echo "[YES] - for all dictionaries, [y/n] - for this dictionary"
+                read -p "[YES/y/n] "  REMOVE_EMPTY </dev/tty
+                if [[ "$REMOVE_EMPTY" = "YES" ]]; then
+                    DO_FOR_ALL_DIRS="$REMOVE_EMPTY"
+                fi
+            fi
+
+            if [[ "$REMOVE_EMPTY" = "y" || "$DO_FOR_ALL_DIRS" = "YES" ]]; then
+                rm -r "$DIRNAME"
+                echo "$DIRNAME has been removed."
+            fi
+        fi
+    done < <(find "${CATALOGS[@]}" -type d -empty -print0)
 }
 
 # Funkcja usuwajaca puste pliki
@@ -340,6 +401,14 @@ while [[ $# -gt 0 ]]; do
         OPTS+=("MARKS")
         shift
         ;;
+    -v|--move)
+        OPTS+=("MOVE")
+        shift
+        ;;
+    -l|--empty-dir)
+        OPTS+=("EMPTYDIR")
+        shift
+        ;;
     -*|--*)
         echo "Unknown option $1" 1>&2
         help
@@ -389,6 +458,12 @@ for OPT in "${OPTS[@]}"; do
             ;;
         SAME)
             same_name_files
+            ;;
+        MOVE)
+            move_files
+            ;;
+        EMPTYDIR)
+            empty_dirs
             ;;
     esac
 done
