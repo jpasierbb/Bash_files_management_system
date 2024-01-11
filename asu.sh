@@ -17,7 +17,7 @@ function help() {
 Usage: asu.sh [CATALOGS] [OPTION] [CATALOG]...
     -h --help        Display this message
     -x --catalog     Specify the default catalog X
-    -d --duplicates  Remove duplicates
+    -d --duplicates  Remove duplicates for the first given catalog
     -e --empty       Remove empty files
     -t --temp        Remove temporary files
     -c --copy        Copy files to directory X
@@ -27,6 +27,7 @@ Usage: asu.sh [CATALOGS] [OPTION] [CATALOG]...
     -m --marks       Replace problematic characters with default
 Example:
 ./asu.sh ./X ./Y1 ./Y2 ./Y3 --catalog ./X --duplicates --empty --temp --same-name --perms --copy --marks --default
+./asu.sh ./X ./Y1 ./Y2 ./Y3 --duplicates
 EOF
 exit 0;
 }
@@ -115,55 +116,50 @@ function copy_files() {
     done
 }
 
-# TODO Funkcja usuwajaca duplikacjace sie pliki wzgledem katalogu podanego w -x/--catalog
+# TODO Funkcja usuwajaca duplikacjace sie pliki wzgledem pierwszego podanego katalogu
 function duplicate_files() {
     FILES=()
     PREVIOUS_HASH=""
 
     while IFS= read -r -d $'\0' HASH_FILENAME; do
-        FILENAME=$(echo "$HASH_FILENAME" | cut -c 35-)
-        HASH=$(echo "$HASH_FILENAME" | cut -c -31)
+        FILENAME=$(echo "$HASH_FILENAME" | sed -n 's/^[[:alnum:][:punct:]]\{32\}\s*//p')
+        HASH=$(echo "$HASH_FILENAME" | sed 's/\s.*$//')
         if [[ "$PREVIOUS_HASH" != "$HASH" ]]; then
             if [[ "$PREVIOUS_HASH" != "" ]]; then
                 echo Detected duplicate files: "${FILES[@]}"
-    TIMES_CREATED=()
+                TIMES_CREATED=()
 
-    FILE_CREATED_FIRST="$FILES"
-    MIN_TIME=$(stat "$FILE_CREATED_FIRST" -c %Y)
+                FILE_CREATED_FIRST="$FILES"
+                MIN_TIME=$(stat "$FILE_CREATED_FIRST" -c %Y)
 
-    for FILE in "${FILES[@]}"; do
-        TIME=$(stat "$FILE" -c %Y)
-        TIMES_CREATED+=("$TIME")
+                for FILE in "${FILES[@]}"; do
+                    TIME=$(stat "$FILE" -c %Y)
+                    TIMES_CREATED+=("$TIME")
 
-        if [[ ${MIN_TIME} -gt ${TIME} ]]; then
-            MIN_TIME="$TIME"
-            FILE_CREATED_FIRST="$FILE"
-        fi
-    done
-    if [[ "$DEFAULT" = "y" ]]; then
-        for FILE in "${FILES[@]}"; do
-            if [[ "$FILE" != "$FILE_CREATED_FIRST" ]]; then
-                echo "Removing duplicate file: $FILE"
-                rm "$FILE"
-            fi
-        done
-    else
-        read -p "Do you want to remove all the duplicates and leave only: $FILE_CREATED_FIRST? [y/n] " REMOVE_DUPLICATES </dev/tty
-        if [[ "$REMOVE_DUPLICATES" = "y" ]]; then
-            for FILE in "${FILES[@]}"; do
-                if [[ "$FILE" != "$FILE_CREATED_FIRST" ]]; then
-                    rm "$FILE"
+                    if [[ ${MIN_TIME} -gt ${TIME} ]]; then
+                        MIN_TIME="$TIME"
+                        FILE_CREATED_FIRST="$FILE"
+                    fi
+                done
+
+                # TODO mechanizm do usuwania wszystkich na raz
+                echo "F: $FILE"
+                read -p "Do you want to remove all the duplicates and leave only: $FILE_CREATED_FIRST? [y/n] " REMOVE_DUPLICATES </dev/tty
+                if [[ "$REMOVE_DUPLICATES" = "y" ]]; then
+                    for FILE in "${FILES[@]}"; do
+                        if [[ "$FILE" != "$FILE_CREATED_FIRST" ]]; then
+                            rm "$FILE"
+                        fi
+                    done
                 fi
-            done
-        fi
-    fi
+
             fi
             FILES=("$FILENAME")
             PREVIOUS_HASH="$HASH"
         else
             FILES+=("$FILENAME")
         fi
-    done < <(find "${CATALOGS[@]}" -type f -print0 | xargs -0 md5sum -z | sort -k1,32 -z | uniq -w32 -z -D)
+    done < <(find "${CATALOGS[@]}" -type f -print0 | xargs -0 md5sum | awk -v ORS='\0' -v FS='\n' '{print $1 $2}' | sort -k1,32 -z | uniq -w32 -z -D)
 }
 
 # Funkcja zmieniajaca nazwe pliku
