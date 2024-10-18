@@ -1,4 +1,4 @@
-# File Management Script (asu.sh)
+# File Management Script (Bash)
 
 ## Overview
 This project provides a Bash script (`asu.sh`) to help manage files and directories by performing various operations such as removing duplicates, renaming files, copying or moving files to specified directories, and more. It is designed to clean up file systems by applying multiple operations specified by the user.
